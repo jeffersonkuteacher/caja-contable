@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Grupos Activos</title>
+    <style>
+        :root { 
+            --primary: #4f46e5; 
+            --primary-hover: #4338ca; 
+            --bg-main: #f8fafc; 
+            --text-dark: #0f172a; 
+            --text-muted: #64748b; 
+            --border: #e2e8f0; 
+            --success: #10b981; 
+        }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background-color: var(--bg-main); 
+            color: var(--text-dark); 
+            margin: 0; 
+            padding: 24px; 
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 32px; }
+        .header h1 { color: #1e293b; margin-bottom: 8px; }
+        .layout-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+        @media (min-width: 768px) { .layout-grid { grid-template-columns: 350px 1fr; } }
+        .card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 24px; }
+        .card h2 { font-size: 1.2rem; margin-top: 0; border-bottom: 2px solid var(--bg-main); padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 14px; }
+        input[type="text"], input[type="date"], select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+        button { background-color: var(--primary); color: white; border: none; padding: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; width: 100%; transition: 0.2s; }
+        button:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #94a3b8; cursor: not-allowed; }
+        .groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+        .group-badge { background: #f1f5f9; border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+        .group-badge h3 { margin: 0 0 10px 0; color: var(--primary); }
+        .group-badge .count { font-size: 32px; font-weight: bold; color: var(--text-dark); margin: 10px 0; }
+        .group-badge p { margin: 4px 0; font-size: 13px; color: var(--text-muted); }
+        .alert { padding: 10px; border-radius: 6px; text-align: center; margin-top: 10px; display: none; font-size: 14px; }
+        .alert-success { background: #d1fae5; color: #065f46; }
+        .alert-error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Centro de Control de Grupos Activos</h1>
+        <p>Apertura grupos y matrícula estudiantes buscando por su nombre (Columna C)</p>
+    </div>
+
+    <div class="layout-grid">
+        <div>
+            <div class="card">
+                <h2>Matricular Estudiante</h2>
+                <form id="formAsignar">
+                    <div class="form-group">
+                        <label>Nombre del Estudiante:</label>
+                        <input type="text" id="nombreEstudiante" list="listaNombres" required placeholder="Escribe para buscar alumno...">
+                        <datalist id="listaNombres"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Seleccionar Grupo Activo:</label>
+                        <select id="selectGrupoAsignar" required>
+                            <option value="">Cargando grupos...</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="btnAsignar">Matricular en Grupo</button>
+                    <div id="alertAsignar" class="alert"></div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Aperturar Nuevo Grupo</h2>
+                <form id="formCrearGrupo">
+                    <div class="form-group">
+                        <label>Nombre del Grupo:</label>
+                        <input type="text" id="nuevoNombreGrupo" required placeholder="Ej. Grupo Adultos A">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Inicio:</label>
+                        <input type="date" id="fechaInicio" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha Estimada de Fin:</label>
+                        <input type="date" id="fechaFin" required>
+                    </div>
+                    <button type="submit" id="btnCrear">Aperturar Grupo</button>
+                    <div id="alertCrear" class="alert"></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Dashboard de Grupos Activos</h2>
+            <button id="btnRecargar" style="width: auto; background: #64748b; margin-bottom: 20px;">🔄 Recargar Datos</button>
+            
+            <div id="contenedorGrupos" class="groups-grid">
+                <p>Cargando información desde la base de datos...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Enlace de Google Apps Script actualizado de manera automática
+    const URL_GOOGLE_SCRIPT = 'https://script.google.com/macros/s/AKfycbz5J9cMbZs3E_3d9CXHoQVC178BNixeZWAXbbs1aW1oJOCU1AamLR-l9hTcpDPQtRalWg/exec';
+
+    async function enviarPeticion(payload) {
+        const response = await fetch(URL_GOOGLE_SCRIPT, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    }
+
+    async function cargarDatosInit() {
+        const contenedor = document.getElementById('contenedorGrupos');
+        const select = document.getElementById('selectGrupoAsignar');
+        const dataListNombres = document.getElementById('listaNombres');
+        
+        contenedor.innerHTML = "<p>Sincronizando con Google Sheets...</p>";
+        select.innerHTML = "<option value=''>Seleccione un grupo...</option>";
+        dataListNombres.innerHTML = ""; 
+
+        try {
+            const res = await enviarPeticion({ action: "getDatos" });
+            
+            if (res.status === "success") {
+                if (res.grupos.length > 0) {
+                    contenedor.innerHTML = ""; 
+                    res.grupos.forEach(grupo => {
+                        const option = document.createElement('option');
+                        option.value = grupo.nombre;
+                        option.innerText = grupo.nombre;
+                        select.appendChild(option);
+
+                        const formatFecha = (f) => f ? new Date(f).toLocaleDateString() : 'N/A';
+                        
+                        const card = document.createElement('div');
+                        card.className = "group-badge";
+                        card.innerHTML = `
+                            <h3>${grupo.nombre}</h3>
+                            <p>Estudiantes matriculados:</p>
+                            <div class="count">${grupo.cantidad}</div>
+                            <p><strong>Inicio:</strong> ${formatFecha(grupo.inicio)}</p>
+                            <p><strong>Fin:</strong> ${formatFecha(grupo.fin)}</p>
+                        `;
+                        contenedor.appendChild(card);
+                    });
+                } else {
+                    contenedor.innerHTML = "<p>Aún no hay grupos creados.</p>";
+                }
+
+                res.nombres.forEach(nombre => {
+                    const optionNombre = document.createElement('option');
+                    optionNombre.value = nombre;
+                    dataListNombres.appendChild(optionNombre);
+                });
+            }
+        } catch (error) {
+            contenedor.innerHTML = "<p style='color:red;'>Error al cargar datos. Revisa la conexión.</p>";
+        }
+    }
+
+    document.getElementById('formCrearGrupo').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnCrear');
+        const alertBox = document.getElementById('alertCrear');
+        btn.disabled = true; alertBox.style.display = "none";
+
+        const payload = {
+            action: "crearGrupo",
+            nombre: document.getElementById('nuevoNombreGrupo').value,
+            inicio: document.getElementById('fechaInicio').value,
+            fin: document.getElementById('fechaFin').value
+        };
+
+        try {
+            const res = await enviarPeticion(payload);
+            if(res.status === "success") {
+                alertBox.className = "alert alert-success";
+                alertBox.innerText = "¡Grupo aperturado exitosamente!";
+                alertBox.style.display = "block";
+                document.getElementById('formCrearGrupo').reset();
+                cargarDatosInit(); 
+            }
+        } catch (error) {
+            alertBox.className = "alert alert-error";
+            alertBox.innerText = "Error al crear el grupo.";
+            alertBox.style.display = "block";
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('formAsignar').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnAsignar');
+        const alertBox = document.getElementById('alertAsignar');
+        btn.disabled = true; alertBox.style.display = "none";
+
+        const payload = {
+            action: "asignarEstudiante",
+            nombreEstudiante: document.getElementById('nombreEstudiante').value,
+            nombreGrupo: document.getElementById('selectGrupoAsignar').value
+        };
+
+        try {
+            const res = await enviarPeticion(payload);
+            if(res.status === "success") {
+                alertBox.className = "alert alert-success";
+                alertBox.innerText = `¡${res.nombre} añadido a ${payload.nombreGrupo}!`;
+                alertBox.style.display = "block";
+                document.getElementById('nombreEstudiante').value = "";
+                cargarDatosInit(); 
+            } else {
+                alertBox.className = "alert alert-error";
+                alertBox.innerText = res.message; 
+                alertBox.style.display = "block";
+            }
+        } catch (error) {
+            alertBox.className = "alert alert-error";
+            alertBox.innerText = "Error de red al asignar.";
+            alertBox.style.display = "block";
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('btnRecargar').addEventListener('click', cargarDatosInit);
+    window.onload = cargarDatosInit;
+</script>
+</body>
+</html>
